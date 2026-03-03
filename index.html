@@ -211,19 +211,61 @@
         });
 
         // Mock AI function (Replace this with a real fetch request to an API later)
-        async function analyzeImageWithAI(file) {
-            return new Promise(resolve => {
-                setTimeout(() => {
-                    resolve({
-                        name: "Grilled Free-Range Chicken Bowl",
-                        calories: 420,
-                        protein: 48,
-                        fat: 12,
-                        carbs: 25
-                    });
-                }, 1500); // 1.5 second simulated delay
-            });
+// Real API function using Fetch
+async function analyzeImageWithAI(file) {
+    // 1. Prepare the image file to be sent over the network
+    const formData = new FormData();
+    formData.append('image', file);
+
+    // 2. Put your actual API key here (See security note below!)
+    const API_KEY = '928fa7755047749ed87ed60a204bab9ad25187c0'; 
+
+    try {
+        // Step A: Send the image to the API to recognize the dish
+        const recognitionResponse = await fetch('https://api.logmeal.com/v2/image/segmentation/complete', {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Bearer ' + API_KEY
+            },
+            body: formData
+        });
+
+        const recognitionData = await recognitionResponse.json();
+
+        // Check if the API successfully found food
+        if (!recognitionData.imageId) {
+            throw new Error("Could not recognize food in the image.");
         }
+
+        // Step B: Ask the API for the nutritional data of that specific recognized image
+        const nutritionResponse = await fetch('https://api.logmeal.com/v2/recipe/nutritionalInfo', {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Bearer ' + API_KEY,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ imageId: recognitionData.imageId })
+        });
+
+        const nutritionData = await nutritionResponse.json();
+
+        // 3. Map the API's response to the format our dashboard expects
+        return {
+            name: nutritionData.foodName[0] || "Unknown Dish",
+            calories: Math.round(nutritionData.nutritional_info.calories),
+            protein: Math.round(nutritionData.nutritional_info.macronutrients.protein),
+            fat: Math.round(nutritionData.nutritional_info.macronutrients.fat),
+            carbs: Math.round(nutritionData.nutritional_info.macronutrients.carbs)
+        };
+
+    } catch (error) {
+        console.error("Error analyzing image:", error);
+        alert("Oops! Something went wrong analyzing the meal.");
+        
+        // Return zeros if it fails so the app doesn't crash
+        return { name: "Analysis Failed", calories: 0, protein: 0, fat: 0, carbs: 0 };
+    }
+}
 
         function updateTotals(data) {
             totals.calories += data.calories;
