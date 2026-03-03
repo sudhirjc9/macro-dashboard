@@ -180,6 +180,11 @@
     </div>
 
     <script>
+        // ----------------------------------------------------
+        // PASTE YOUR GOOGLE API KEY BELOW
+        const API_KEY = 'AIzaSyBKSFe6XRbWCpwuxUfdDdZSSivsVfCu7ZA'; 
+        // ----------------------------------------------------
+
         // State variables
         let totals = { calories: 0, protein: 0, fat: 0, carbs: 0 };
 
@@ -199,73 +204,66 @@
             // Create a preview URL for the uploaded image
             const imageUrl = URL.createObjectURL(file);
 
-            // Simulate sending the image to an AI API (like LogMeal or Google Cloud Vision)
-            const analysisResult = await analyzeImageWithAI(file);
+            // Send to Google AI
+            const analysisResult = await analyzeImageWithGoogle(file);
 
             // Hide loader
             loader.style.display = 'none';
 
             // Update UI
-            updateTotals(analysisResult);
-            addMealToLog(imageUrl, analysisResult);
+            if(analysisResult.name !== "Analysis Failed") {
+                updateTotals(analysisResult);
+                addMealToLog(imageUrl, analysisResult);
+            }
         });
 
-        // Mock AI function (Replace this with a real fetch request to an API later)
-// Real API function using Fetch
-async function analyzeImageWithAI(file) {
-    // 1. Prepare the image file to be sent over the network
-    const formData = new FormData();
-    formData.append('image', file);
-
-    // 2. Put your actual API key here (See security note below!)
-    const API_KEY = '928fa7755047749ed87ed60a204bab9ad25187c0'; 
-
-    try {
-        // Step A: Send the image to the API to recognize the dish
-        const recognitionResponse = await fetch('https://api.logmeal.com/v2/image/segmentation/complete', {
-            method: 'POST',
-            headers: {
-                'Authorization': 'Bearer ' + API_KEY
-            },
-            body: formData
-        });
-
-        const recognitionData = await recognitionResponse.json();
-
-        // Check if the API successfully found food
-        if (!recognitionData.imageId) {
-            throw new Error("Could not recognize food in the image.");
+        // Convert the image to Base64 to send to Google
+        function fileToGenerativePart(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    const base64Data = reader.result.split(',')[1];
+                    resolve({
+                        inlineData: { data: base64Data, mimeType: file.type }
+                    });
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
         }
 
-        // Step B: Ask the API for the nutritional data of that specific recognized image
-        const nutritionResponse = await fetch('https://api.logmeal.com/v2/recipe/nutritionalInfo', {
-            method: 'POST',
-            headers: {
-                'Authorization': 'Bearer ' + API_KEY,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ imageId: recognitionData.imageId })
-        });
+        // Send to Gemini Vision API
+        async function analyzeImageWithGoogle(file) {
+            try {
+                const imagePart = await fileToGenerativePart(file);
 
-        const nutritionData = await nutritionResponse.json();
+                const prompt = `Analyze this food image. Provide ONLY a JSON object with this exact structure, no extra text: {"name": "Dish Name", "calories": 400, "protein": 20, "fat": 15, "carbs": 45}. Estimate the nutritional values based on a standard serving.`;
 
-        // 3. Map the API's response to the format our dashboard expects
-        return {
-            name: nutritionData.foodName[0] || "Unknown Dish",
-            calories: Math.round(nutritionData.nutritional_info.calories),
-            protein: Math.round(nutritionData.nutritional_info.macronutrients.protein),
-            fat: Math.round(nutritionData.nutritional_info.macronutrients.fat),
-            carbs: Math.round(nutritionData.nutritional_info.macronutrients.carbs)
-        };
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: prompt }, imagePart] }]
+                    })
+                });
 
-    } catch (error) {
-        console.error("Error analyzing image:", error);
-        alert("Oops! Something went wrong analyzing the meal.");
-        
-        // Return zeros if it fails so the app doesn't crash
-        return { name: "Analysis Failed", calories: 0, protein: 0, fat: 0, carbs: 0 };
-    }
-}
+                if (!response.ok) throw new Error("API Call Failed");
+
+                const result = await response.json();
+                
+                // Parse the text response back into a Javascript Object
+                const rawText = result.candidates[0].content.parts[0].text;
+                const cleanJson = rawText.replace(/```json\n|```/g, ''); 
+                const nutritionData = JSON.parse(cleanJson);
+
+                return nutritionData;
+
+            } catch (error) {
+                console.error("Error analyzing image:", error);
+                alert("Oops! Something went wrong analyzing the meal.");
+                return { name: "Analysis Failed", calories: 0, protein: 0, fat: 0, carbs: 0 };
+            }
+        }
 
         function updateTotals(data) {
             totals.calories += data.calories;
@@ -273,7 +271,6 @@ async function analyzeImageWithAI(file) {
             totals.fat += data.fat;
             totals.carbs += data.carbs;
 
-            // Animate numbers (simple approach)
             document.getElementById('total-cals').innerText = totals.calories;
             document.getElementById('total-protein').innerText = totals.protein;
             document.getElementById('total-fat').innerText = totals.fat;
