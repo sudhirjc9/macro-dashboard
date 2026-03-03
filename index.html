@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MacroVision Dashboard</title>
+    <style>
+        :root {
+            --bg-color: #f3f4f6;
+            --card-bg: #ffffff;
+            --text-main: #1f2937;
+            --text-light: #6b7280;
+            --primary: #3b82f6;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .container {
+            max-width: 900px;
+            width: 100%;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .upload-section {
+            background: var(--card-bg);
+            padding: 2rem;
+            border-radius: 1rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            margin-bottom: 2rem;
+            border: 2px dashed #cbd5e1;
+            transition: 0.3s;
+        }
+
+        .upload-section:hover {
+            border-color: var(--primary);
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .upload-btn {
+            background-color: var(--primary);
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            font-weight: bold;
+            display: inline-block;
+            margin-top: 1rem;
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: var(--card-bg);
+            padding: 1.5rem;
+            border-radius: 1rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            margin: 0.5rem 0;
+        }
+
+        .stat-card.calories .stat-value { color: var(--warning); }
+        .stat-card.protein .stat-value { color: var(--primary); }
+        .stat-card.fat .stat-value { color: var(--danger); }
+        .stat-card.carbs .stat-value { color: var(--success); }
+
+        .meal-log {
+            background: var(--card-bg);
+            padding: 1.5rem;
+            border-radius: 1rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .meal-item {
+            display: flex;
+            align-items: center;
+            padding: 1rem 0;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .meal-item:last-child {
+            border-bottom: none;
+        }
+
+        .meal-img {
+            width: 60px;
+            height: 60px;
+            border-radius: 0.5rem;
+            object-fit: cover;
+            margin-right: 1rem;
+        }
+
+        .loader {
+            display: none;
+            margin: 1rem auto;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid var(--primary);
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <h1>MacroVision Dashboard</h1>
+            <p style="color: var(--text-light);">Upload your meal to instantly calculate nutritional values.</p>
+        </header>
+
+        <div class="upload-section">
+            <h3>Snap a picture of your meal</h3>
+            <label for="meal-upload" class="upload-btn">Choose Image</label>
+            <input type="file" id="meal-upload" accept="image/*">
+            <div class="loader" id="loader"></div>
+        </div>
+
+        <div class="dashboard">
+            <div class="stat-card calories">
+                <div style="color: var(--text-light);">Total Calories</div>
+                <div class="stat-value" id="total-cals">0</div>
+                <div>kcal</div>
+            </div>
+            <div class="stat-card protein">
+                <div style="color: var(--text-light);">Protein</div>
+                <div class="stat-value" id="total-protein">0</div>
+                <div>g</div>
+            </div>
+            <div class="stat-card fat">
+                <div style="color: var(--text-light);">Fat</div>
+                <div class="stat-value" id="total-fat">0</div>
+                <div>g</div>
+            </div>
+            <div class="stat-card carbs">
+                <div style="color: var(--text-light);">Carbs</div>
+                <div class="stat-value" id="total-carbs">0</div>
+                <div>g</div>
+            </div>
+        </div>
+
+        <div class="meal-log" id="meal-log">
+            <h2>Today's Meals</h2>
+            </div>
+    </div>
+
+    <script>
+        // State variables
+        let totals = { calories: 0, protein: 0, fat: 0, carbs: 0 };
+
+        // DOM Elements
+        const uploadInput = document.getElementById('meal-upload');
+        const loader = document.getElementById('loader');
+        const mealLog = document.getElementById('meal-log');
+
+        // Listen for file upload
+        uploadInput.addEventListener('change', async function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            // Show loader
+            loader.style.display = 'block';
+
+            // Create a preview URL for the uploaded image
+            const imageUrl = URL.createObjectURL(file);
+
+            // Simulate sending the image to an AI API (like LogMeal or Google Cloud Vision)
+            const analysisResult = await analyzeImageWithAI(file);
+
+            // Hide loader
+            loader.style.display = 'none';
+
+            // Update UI
+            updateTotals(analysisResult);
+            addMealToLog(imageUrl, analysisResult);
+        });
+
+        // Mock AI function (Replace this with a real fetch request to an API later)
+        async function analyzeImageWithAI(file) {
+            return new Promise(resolve => {
+                setTimeout(() => {
+                    resolve({
+                        name: "Grilled Free-Range Chicken Bowl",
+                        calories: 420,
+                        protein: 48,
+                        fat: 12,
+                        carbs: 25
+                    });
+                }, 1500); // 1.5 second simulated delay
+            });
+        }
+
+        function updateTotals(data) {
+            totals.calories += data.calories;
+            totals.protein += data.protein;
+            totals.fat += data.fat;
+            totals.carbs += data.carbs;
+
+            // Animate numbers (simple approach)
+            document.getElementById('total-cals').innerText = totals.calories;
+            document.getElementById('total-protein').innerText = totals.protein;
+            document.getElementById('total-fat').innerText = totals.fat;
+            document.getElementById('total-carbs').innerText = totals.carbs;
+        }
+
+        function addMealToLog(imgUrl, data) {
+            const mealItem = document.createElement('div');
+            mealItem.className = 'meal-item';
+            mealItem.innerHTML = `
+                <img src="${imgUrl}" alt="${data.name}" class="meal-img">
+                <div>
+                    <strong>${data.name}</strong>
+                    <div style="color: #6b7280; font-size: 0.9rem;">
+                        ${data.calories} kcal • ${data.protein}g Protein • ${data.fat}g Fat • ${data.carbs}g Carbs
+                    </div>
+                </div>
+            `;
+            mealLog.appendChild(mealItem);
+        }
+    </script>
+</body>
+</html>
